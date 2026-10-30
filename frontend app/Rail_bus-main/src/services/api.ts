@@ -1,10 +1,13 @@
 import type { Booking, BusRoute, PassengerProfile, RouteStop, TicketPayload, Trip, TripStatus } from '../types';
+import QRCode from 'qrcode';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/railbus-api/api/v1').replace(/\/$/, '');
 const TOKEN_KEY = 'railbus-token';
 
+export const makeTicketQrDataUrl = (value: string) => QRCode.toDataURL(value, { width: 360, margin: 2, errorCorrectionLevel: 'M' });
+
 type Data = Record<string, any>;
-export type ServiceOption = { route: BusRoute; tripId: string | null; destinationStop: RouteStop; trainNumber: string; travelDate: string; status: string; capacity: number; confirmedSeats: number; checkoutHolds: number; seatsRemaining: number; farePerSeat: number; deadlineAt: string | null };
+export type ServiceOption = { route: BusRoute; tripId: string | null; destinationStop: RouteStop; trainNumber: string; travelDate: string; departureNote: string; status: string; capacity: number; confirmedSeats: number; checkoutHolds: number; seatsRemaining: number; farePerSeat: number; deadlineAt: string | null };
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); this.name = 'ApiError'; }
@@ -83,7 +86,7 @@ function normalizeTrip(raw: Data, routes: BusRoute[]): Trip {
     id: String(raw.id), routeId, route: route ?? normalizeRoute({ id: routeId, name: raw.route_name, origin: raw.origin, destination: raw.destination }),
     scheduledDepartureTime: departure, departureTimeDisplay: departure.includes('T') ? new Date(departure).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
     status: statusMap[status] ?? status as TripStatus,
-    confirmedBookingsCount: count, targetThreshold: asNumber(pick(raw, 'target_threshold'), 20),
+    confirmedBookingsCount: count, targetThreshold: asNumber(pick(raw, 'target_threshold'), 20), capacity: asNumber(pick(raw, 'capacity'), 56),
     busNumber: pick(raw, 'bus_registration', 'bus_number'), conductorName: pick(raw, 'conductor_name'), boardingBay: pick(raw, 'boarding_bay'),
     connectedTrainNumber: pick(raw, 'train_number'),
   };
@@ -209,7 +212,7 @@ export const api = {
     const rows = await request<Data[]>('/services/search', { method: 'POST', body: JSON.stringify({ destination, train_number: trainNumber, travel_date: travelDate }) });
     return rows.map((row) => ({ route: normalizeRoute(row.route), tripId: row.trip_id ? String(row.trip_id) : null,
       destinationStop: normalizeStop(row.destination_stop, 0), trainNumber: String(row.train_number), travelDate: String(row.travel_date),
-      status: String(row.status), capacity: asNumber(row.capacity, 20), confirmedSeats: asNumber(row.confirmed_seats),
+      status: String(row.status), departureNote: String(row.departure_note ?? 'Planning estimate only. Actual bus departure follows train arrival and Admin dispatch approval.'), capacity: asNumber(row.capacity, 56), confirmedSeats: asNumber(row.confirmed_seats),
       checkoutHolds: asNumber(row.active_checkout_holds), seatsRemaining: asNumber(row.seats_remaining), farePerSeat: asNumber(row.fare_per_seat), deadlineAt: row.deadline_at ?? null }));
   },
   async resolveTrip(routeId: string, destinationStopId: string, trainNumber: string, travelDate: string): Promise<Trip> {

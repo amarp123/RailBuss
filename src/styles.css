@@ -308,10 +308,6 @@ td b { color: #34433c; font-weight: 600; }
 .danger-button { border-color: #f0d9d7; color: #b8544d; }
 .red-button { background: #bb514b; }
 .manifest-title, .assign-box h3, .reject-box h3 { margin: 21px 0 9px; font: 700 12px Manrope, sans-serif; }
-.manifest-row { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid #eaefec; }
-.manifest-row > div:nth-child(2) { display: grid; flex: 1; gap: 4px; }
-.manifest-row b { font-size: 10px; }
-.manifest-row span:not(.status) { color: #919c96; font-size: 9px; }
 .assign-box { margin-top: 15px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: white; }
 .assign-box h3 { margin: 0 0 12px; }
 .assign-box label { display: block; margin: 12px 0 6px; color: #76837c; font-size: 9px; }
@@ -372,46 +368,20 @@ td b { color: #34433c; font-weight: 600; }
 .dialog-body p { margin: 0 0 4px; color: #78857e; font-size: 10px; line-height: 1.5; }
 .dialog-body label { margin-top: 7px; color: #526159; font-size: 10px; font-weight: 600; }
 .dialog-body .primary { margin-top: 12px; }
-.conductor-sidebar-card { display: grid; justify-items: start; gap: 7px; padding: 15px 12px; border: 1px solid #29443a; border-radius: 10px; background: #152a25; }
-.crew-avatar { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; color: #d7f1e2; background: #246c51; font: 700 13px Manrope, sans-serif; }
-.conductor-sidebar-card b { color: #edf5f0; font-size: 11px; }
-.conductor-sidebar-card > span { color: #a6b8af; font-size: 9px; }
-.crew-online { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: #98c9ad; font-size: 9px; }
-.crew-online i { width: 6px; height: 6px; border-radius: 50%; background: #54c687; }
-.conductor-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-.conductor-kpis .kpi-card { display: grid; min-height: 90px; gap: 8px; }
-.conductor-kpis span { color: #78867f; font-size: 10px; }
-.conductor-kpis b { color: #1d2b25; font: 700 23px Manrope, sans-serif; }
 .trip-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .dispatch-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #f1d6a9; border-radius: 10px; background: #fffaf1; }
 .dispatch-card > div { display: grid; gap: 5px; }
 .dispatch-card > div b { color: #25342e; font-size: 13px; }
 .dispatch-card > div span, .dispatch-card > div small { color: #78867f; font-size: 10px; }
-.conductor-trip-card { padding: 17px; }
-.conductor-trip-top { display: flex; align-items: center; justify-content: space-between; }
-.trip-id { color: #9aa49e; font-size: 9px; }
-.conductor-trip-card h2 { margin: 15px 0 7px; color: #25342e; font: 700 15px Manrope, sans-serif; }
 .route-direction-line { display: flex; align-items: center; gap: 6px; color: #84918a; font-size: 9px; }
-.conductor-trip-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; padding: 13px 0; border-block: 1px solid #edf0ee; }
-.conductor-trip-info div { display: grid; gap: 5px; }
-.conductor-trip-info span, .boarding-progress span { color: #95a19a; font-size: 9px; }
-.conductor-trip-info b, .boarding-progress b { color: #43544a; font-size: 10px; }
-.boarding-progress { display: grid; gap: 8px; margin-bottom: 15px; }
-.boarding-progress > div:first-child { display: flex; justify-content: space-between; }
-.wide-progress { width: 100%; height: 6px; }
 .empty-panel { grid-column: 1 / -1; }
-.conductor-actions { display: grid; gap: 9px; margin: 15px 0 20px; }
-.conductor-actions > label { margin-top: 4px; color: #526159; font-size: 10px; font-weight: 600; }
-.conductor-actions textarea { width: 100%; min-height: 84px; resize: vertical; padding: 10px; border: 1px solid #e2e8e4; border-radius: 7px; color: #35443c; font: inherit; font-size: 10px; }
-.conductor-actions input { width: 100%; padding: 9px 10px; border: 1px solid #e2e8e4; border-radius: 7px; font: inherit; font-size: 10px; }
-.scan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.conductor-create-form { display: grid; align-content: start; gap: 14px; }
+.conductor-create-form .panel-head { margin-bottom: 0; }
+.conductor-create-form .panel-head h2 { display: flex; align-items: center; gap: 7px; }
+.conductor-create-form > label { display: grid; gap: 6px; color: #59665f; font-size: 11px; font-weight: 600; }
+.conductor-create-form input { width: 100%; min-height: 39px; padding: 8px 10px; border: 1px solid #dfe7e2; border-radius: 7px; color: #35443c; font: inherit; }
+.conductor-create-form label small { color: #89958e; font-size: 9px; font-weight: 400; }
 .success-note { display: flex; align-items: center; gap: 7px; margin: 10px 0; padding: 10px; border: 1px solid #d8ecdf; border-radius: 7px; color: #23784f; background: #eff9f2; font-size: 10px; }
-.manifest-heading { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 7px; }
-.manifest-heading h3 { margin: 0 0 4px; color: #304139; font: 700 12px Manrope, sans-serif; }
-.manifest-heading p { margin: 0; color: #8c9891; font-size: 9px; }
-.manifest-person { display: grid; min-width: 0; flex: 1; gap: 4px; }
-.manifest-person b { overflow: hidden; color: #35443d; font-size: 10px; text-overflow: ellipsis; }
-.manifest-person span { color: #89958e; font-size: 8px; }
 
 @media (max-width: 1100px) {
   .sidebar { width: 215px; }
@@ -501,9 +471,5 @@ td b { color: #34433c; font-weight: 600; }
 }
 @media (max-width: 760px) {
   .fleet-summary, .trip-card-grid { grid-template-columns: 1fr; }
-  .conductor-kpis { gap: 8px; }
-  .conductor-kpis .kpi-card { min-height: 82px; padding: 11px; }
-  .conductor-kpis span { font-size: 8px; }
-  .conductor-kpis b { font-size: 19px; }
   .login-form-wrap { min-height: 430px; }
 }

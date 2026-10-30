@@ -102,10 +102,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshData = async () => {
     try {
-      const [fetchedTrips, fetchedRoutes] = await Promise.all([
-        api.getTrips(),
-        api.getRoutes(),
-      ]);
+      // Demand groups are private API data. The routes directory is public,
+      // but do not request protected trips while a passenger is signed out.
+      const fetchedRoutes = await api.getRoutes();
+      const fetchedTrips = user ? await api.getTrips() : [];
       setTrips(fetchedTrips);
       setRoutes(fetchedRoutes);
       setBookings(isOnline && user ? await api.getBookings(fetchedTrips) : await getOfflineTickets());

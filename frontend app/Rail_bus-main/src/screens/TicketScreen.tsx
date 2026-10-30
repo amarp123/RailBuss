@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { ArrowLeft, Share2, Download, PlusCircle, CheckCircle2 } from 'lucide-react';
 import { TicketQRRenderer } from '../components/ticket/TicketQRRenderer';
 import { Booking } from '../types';
+import { makeTicketQrDataUrl } from '../services/api';
 
 export const TicketScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -45,8 +46,8 @@ export const TicketScreen: React.FC = () => {
     }
   };
 
-  const handleSaveToPhone = () => {
-    const dataUrl = activeBooking.ticket?.qrDataUrl;
+  const handleSaveToPhone = async () => {
+    const dataUrl = activeBooking.ticket?.qrDataUrl || (activeBooking.ticket?.qrSignature ? await makeTicketQrDataUrl(activeBooking.ticket.qrSignature).catch(() => '') : '');
     if (dataUrl) {
       const link = document.createElement('a');
       link.href = dataUrl;

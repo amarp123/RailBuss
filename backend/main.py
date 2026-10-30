@@ -32,7 +32,7 @@ if BACKEND_ENV.exists():
 DB_PATH = Path(os.getenv("RAILBUS_DB_PATH", str(ROOT / "backend" / "railbus.sqlite3")))
 ROUTES_CSV = Path(os.getenv("RAILBUS_ROUTES_CSV", str(ROOT / "bus_routes.csv")))
 THRESHOLD = 20
-CAPACITY = 20
+CAPACITY = 56
 FARE_INR = float(os.getenv("RAILBUS_FARE_INR", "50"))
 DEMAND_WINDOW_HOURS = max(1, int(os.getenv("RAILBUS_DEMAND_WINDOW_HOURS", "12")))
 JWT_SECRET = os.getenv("RAILBUS_JWT_SECRET", "railbus-local-mvp-signing-key-change-before-deployment")
@@ -171,13 +171,14 @@ def seed_users() -> None:
     seeds = [
         ("operator@railbus.com", "RailBus Operator", "OPERATOR"),
         ("admin@railbus.com", "RailBus Admin", "ADMIN"),
-        ("conductor@railbus.com", "RailBus Conductor", "CONDUCTOR"),
     ]
     password = os.getenv("RAILBUS_DEMO_PASSWORD", "password123")
     with db() as con:
         for email, name, role in seeds:
             con.execute("INSERT OR IGNORE INTO users(id,email,password_hash,full_name,role,created_at) VALUES(?,?,?,?,?,?)",
                         (str(uuid.uuid4()), email, password_hash(password), name, role, now_iso()))
+        # Remove the old shared demo login so conductor access is provisioned per person by Admin.
+        con.execute("UPDATE users SET is_active=0 WHERE email='conductor@railbus.com' AND role='CONDUCTOR'")
 
 
 def slug(value: str) -> str:
@@ -299,16 +300,16 @@ def notify_user(con: sqlite3.Connection, user_id: str, trip_id: str, kind: str, 
 def expire_demand_groups() -> None:
     stamp = now_iso()
     with db(immediate=True) as con:
-        trips = con.execute("SELECT * FROM trips WHERE status='AGGREGATING' AND ((deadline_at IS NOT NULL AND deadline_at<=?) OR travel_date<?)", (stamp, date.today().isoformat())).fetchall()
+        trips = con.execute("SELECT * FROM trips WHERE status IN ('AGGREGATING','READY_TO_DISPATCH') AND ((deadline_at IS NOT NULL AND deadline_at<=?) OR travel_date<?)", (stamp, date.today().isoformat())).fetchall()
         for trip in trips:
             bookings = con.execute("SELECT * FROM bookings WHERE trip_id=? AND status='WAITING_DISPATCH'", (trip["id"],)).fetchall()
-            con.execute("UPDATE trips SET status='CANCELLED',updated_at=? WHERE id=? AND status='AGGREGATING'", (stamp, trip["id"]))
+            con.execute("UPDATE trips SET status='CANCELLED',updated_at=? WHERE id=? AND status IN ('AGGREGATING','READY_TO_DISPATCH')", (stamp, trip["id"]))
             con.execute("UPDATE bookings SET status='CANCELLED' WHERE trip_id=? AND status='WAITING_DISPATCH'", (trip["id"],))
             add_event(con, "DEMAND_EXPIRED", trip["id"], trip["destination"], f"Demand deadline passed at {trip['demand_count']}/{CAPACITY} seats. Reservations cancelled.")
             con.execute("UPDATE payment_orders SET status='CANCELLED' WHERE trip_id=? AND status='PAID'", (trip["id"],))
             for booking in bookings:
                 notify_user(con, booking["passenger_id"], trip["id"], "SERVICE_CANCELLED", "Bus service unavailable",
-                            f"The Mysuru Junction service to {trip['destination']} did not reach {CAPACITY} seats before the demand deadline. Your booking was cancelled.")
+                            f"The Mysuru Junction service to {trip['destination']} did not receive Admin dispatch approval before its demand deadline. Your booking was cancelled.")
 
 
 def route_json(row: sqlite3.Row) -> dict[str, Any]:
@@ -326,7 +327,7 @@ def trip_json(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
               "origin": route["origin"], "destination": row["destination"], "status": row["status"],
               "demand_count": int(seats), "confirmed_bookings_count": int(seats), "target_threshold": THRESHOLD,
               "capacity": CAPACITY, "seats_remaining": max(0, CAPACITY - int(seats)), "boarded_count": int(boarded), "base_fare": row["base_fare"],
-              "departure_time": None, "train_number": row["train_number"],
+              "departure_time": None, "departure_note": "After train arrival and Admin dispatch approval", "train_number": row["train_number"],
               "travel_date": row["travel_date"], "destination_stop_id": row["destination_stop_id"],
               "deadline_at": row["deadline_at"],
               "bus_id": None, "bus_registration": None, "conductor_name": None,
@@ -340,6 +341,13 @@ class LoginBody(BaseModel):
 
 
 class RegisterBody(LoginBody):
+    password: str = Field(min_length=8, max_length=256)
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=7, max_length=30)
+
+
+class ConductorCreateBody(BaseModel):
+    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=254)
     password: str = Field(min_length=8, max_length=256)
     full_name: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=7, max_length=30)
@@ -425,6 +433,26 @@ def me(user: sqlite3.Row = Depends(current_user)):
     return user_public(user)
 
 
+@app.get("/api/v1/operator/conductors")
+def list_conductors(user: sqlite3.Row = Depends(require_role("ADMIN"))):
+    with db() as con:
+        rows = con.execute("SELECT id,email,full_name,phone,role,is_active,created_at FROM users WHERE role='CONDUCTOR' ORDER BY created_at DESC").fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.post("/api/v1/operator/conductors", status_code=201)
+def create_conductor(body: ConductorCreateBody, user: sqlite3.Row = Depends(require_role("ADMIN"))):
+    email = str(body.email).lower()
+    with db() as con:
+        if con.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
+            raise HTTPException(409, "An account with this email already exists")
+        user_id = str(uuid.uuid4())
+        con.execute("INSERT INTO users(id,email,password_hash,full_name,phone,role,created_at) VALUES(?,?,?,?,?,'CONDUCTOR',?)",
+                    (user_id, email, password_hash(body.password), body.full_name.strip(), body.phone.strip(), now_iso()))
+        row = con.execute("SELECT id,email,full_name,phone,role,is_active,created_at FROM users WHERE id=?", (user_id,)).fetchone()
+    return dict(row)
+
+
 @app.get("/api/v1/routes")
 def list_routes(limit: int = Query(200, ge=1, le=500), offset: int = Query(0, ge=0), q: str | None = None):
     with db() as con:
@@ -472,7 +500,8 @@ def search_services(body: SearchServicesBody, user: sqlite3.Row = Depends(requir
                            "destination_stop": stop, "train_number": train, "travel_date": body.travel_date.isoformat(),
                            "status": status, "capacity": CAPACITY, "confirmed_seats": seats,
                            "seats_remaining": max(0, CAPACITY - seats - holds), "active_checkout_holds": holds, "fare_per_seat": float(route["fixed_fare"]),
-                           "deadline_at": trip["deadline_at"] if trip else None})
+                           "deadline_at": trip["deadline_at"] if trip else None,
+                           "departure_note": "After train arrival and Admin dispatch approval"})
     return result
 
 
@@ -583,7 +612,7 @@ def pay_for_reservation(body: DirectPaymentBody, user: sqlite3.Row = Depends(req
         trip = con.execute("SELECT * FROM trips WHERE id=?", (body.trip_id,)).fetchone()
         if not trip:
             raise HTTPException(404, "Search for buses again; this service is no longer available")
-        if trip["status"] != "AGGREGATING" or not trip["deadline_at"] or trip["deadline_at"] <= stamp:
+        if trip["status"] not in ("AGGREGATING", "READY_TO_DISPATCH") or not trip["deadline_at"] or trip["deadline_at"] <= stamp:
             raise HTTPException(409, "This route group is closed to new reservations")
         if body.destination_stop_id != trip["destination_stop_id"]:
             raise HTTPException(400, "Destination does not match the selected route")
@@ -597,16 +626,16 @@ def pay_for_reservation(body: DirectPaymentBody, user: sqlite3.Row = Depends(req
         con.execute("INSERT INTO bookings(id,booking_reference,passenger_id,trip_id,destination_stop_id,seat_count,status,fare_amount,request_key,payment_order_id,payment_id,created_at) VALUES(?,?,?,?,?,?,'WAITING_DISPATCH',?,?,?,?,?)",
                     (booking_id, "RBW-" + secrets.token_hex(4).upper(), user["id"], trip["id"], body.destination_stop_id, body.seat_count, amount / 100, f"direct:{payment_id}", order_id, payment_id, stamp))
         updated = existing + body.seat_count
-        status = "READY_TO_DISPATCH" if updated >= CAPACITY else "AGGREGATING"
+        status = "READY_TO_DISPATCH" if updated >= THRESHOLD else "AGGREGATING"
         con.execute("UPDATE trips SET demand_count=?,status=?,updated_at=? WHERE id=?", (updated, status, stamp, trip["id"]))
         route = con.execute("SELECT * FROM routes WHERE id=?", (trip["route_id"],)).fetchone()
         add_event(con, "PAID_WAITLIST_BOOKING", trip["id"], f"{route['route_code']} · {trip['destination']}", f"Passenger booking {booking_id[:8]} recorded as paid for {body.seat_count} seat(s); {updated}/{CAPACITY} seats.")
-        if status == "READY_TO_DISPATCH":
-            add_event(con, "DISPATCH_REQUIRED", trip["id"], f"{route['route_code']} · {trip['destination']}", f"Capacity reached ({updated}/{CAPACITY}). Admin action required to dispatch this bus.")
+        if status == "READY_TO_DISPATCH" and trip["status"] != "READY_TO_DISPATCH":
+            add_event(con, "DISPATCH_REQUIRED", trip["id"], f"{route['route_code']} · {trip['destination']}", f"Minimum demand reached ({updated}/{THRESHOLD}); bus capacity is {CAPACITY}. Admin action required to dispatch.")
             admins = con.execute("SELECT id FROM users WHERE role IN ('ADMIN','OPERATOR') AND is_active=1").fetchall()
             for admin in admins:
-                notify_user(con, admin["id"], trip["id"], "DISPATCH_REQUIRED", "Bus ready for dispatch", f"Train {trip['train_number']} to {trip['destination']} has reached {CAPACITY} paid seats. Dispatch approval is required.")
-        notify_user(con, user["id"], trip["id"], "WAITING_DISPATCH", "Payment recorded · waiting for bus", f"Your {body.seat_count} seat(s) are marked paid and reserved. {updated}/{CAPACITY} seats are filled; your ticket will be issued after Admin dispatch.")
+                notify_user(con, admin["id"], trip["id"], "DISPATCH_REQUIRED", "Minimum demand reached · approve dispatch", f"Train {trip['train_number']} to {trip['destination']} has {updated} paid seats (minimum {THRESHOLD}, maximum {CAPACITY}). Admin dispatch approval is required.")
+        notify_user(con, user["id"], trip["id"], "WAITING_DISPATCH", "Payment recorded · waiting for bus", f"Your {body.seat_count} seat(s) are marked paid and reserved. {updated}/{CAPACITY} seats are filled; dispatch approval is required from {THRESHOLD} seats. Your ticket will be issued after Admin dispatch.")
         return booking_json(con, con.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone())
 
 
@@ -684,8 +713,8 @@ def dispatch_service(trip_id: str, body: DispatchBody | None = None, user: sqlit
         trip = con.execute("SELECT * FROM trips WHERE id=?", (trip_id,)).fetchone()
         if not trip:
             raise HTTPException(404, "Demand trip not found")
-        if trip["status"] != "READY_TO_DISPATCH" or int(trip["demand_count"]) < CAPACITY:
-            raise HTTPException(409, f"Dispatch requires {CAPACITY} paid seats. This group has {trip['demand_count']}/{CAPACITY}.")
+        if trip["status"] != "READY_TO_DISPATCH" or int(trip["demand_count"]) < THRESHOLD:
+            raise HTTPException(409, f"Dispatch requires at least {THRESHOLD} paid seats. This group has {trip['demand_count']}/{CAPACITY}.")
         route = con.execute("SELECT * FROM routes WHERE id=?", (trip["route_id"],)).fetchone()
         pending = con.execute("SELECT * FROM bookings WHERE trip_id=? AND status='WAITING_DISPATCH' ORDER BY created_at", (trip_id,)).fetchall()
         for booking in pending:
@@ -696,7 +725,7 @@ def dispatch_service(trip_id: str, body: DispatchBody | None = None, user: sqlit
         for booking in pending:
             notify_user(con, booking["passenger_id"], trip_id, "TICKET_CONFIRMED", "Bus dispatched · ticket confirmed", message)
         add_event(con, "BUS_DISPATCH_CONFIRMED", trip_id, f"{route['route_code']} · {trip['destination']}",
-                  f"{CAPACITY} paid seats verified. Dispatch approved by {user['full_name']}. {body.departure_note if body else ''}".strip())
+                  f"{trip['demand_count']} paid seats verified (minimum {THRESHOLD}, capacity {CAPACITY}). Dispatch approved by {user['full_name']}. {body.departure_note if body else ''}".strip())
         result = trip_json(con, con.execute("SELECT * FROM trips WHERE id=?", (trip_id,)).fetchone())
         result["tickets_issued"] = len(pending)
         return result
@@ -749,7 +778,8 @@ def manifest(trip_id: str, user: sqlite3.Row = Depends(require_role("CONDUCTOR")
         require_claimed_trip(trip, user)
         rows = con.execute("SELECT b.*,t.id AS ticket_id,t.ticket_reference,t.status AS ticket_status,t.boarded_at,u.full_name,u.phone FROM bookings b JOIN tickets t ON t.booking_id=b.id JOIN users u ON u.id=b.passenger_id WHERE b.trip_id=? ORDER BY b.created_at", (trip_id,)).fetchall()
         passengers = [{"ticket_id": row["ticket_id"], "ticket_reference": row["ticket_reference"],
-                       "passenger_name": row["full_name"], "seat_count": row["seat_count"], "status": row["ticket_status"], "boarded_at": row["boarded_at"]} for row in rows]
+                       "passenger_name": row["full_name"], "passenger_phone": row["phone"],
+                       "seat_count": row["seat_count"], "status": row["ticket_status"], "boarded_at": row["boarded_at"]} for row in rows]
         return {"trip_id": trip_id, "route_name": trip["destination"], "status": trip["status"],
                 "total_passengers": int(trip["demand_count"]), "boarded_count": int(trip["boarded_count"]), "manifest": passengers}
 
@@ -807,9 +837,11 @@ def board_ticket(trip_id: str, body: BoardBody, user: sqlite3.Row = Depends(requ
         con.execute("UPDATE trips SET boarded_count=boarded_count+?,updated_at=? WHERE id=?", (booking["seat_count"], boarded_at, trip_id))
         add_event(con, "PASSENGER_BOARDED", trip_id, trip["destination"], f"Ticket {ticket['ticket_reference']} boarded.")
         updated = con.execute("SELECT boarded_count,demand_count FROM trips WHERE id=?", (trip_id,)).fetchone()
-        passenger = con.execute("SELECT full_name FROM users WHERE id=?", (booking["passenger_id"],)).fetchone()
+        passenger = con.execute("SELECT full_name,phone,email FROM users WHERE id=?", (booking["passenger_id"],)).fetchone()
         return {"success": True, "ticket_id": ticket["id"], "ticket_reference": ticket["ticket_reference"],
-                "passenger_name": passenger["full_name"], "boarded_at": boarded_at,
+                "passenger_name": passenger["full_name"], "passenger_phone": passenger["phone"],
+                "passenger_email": passenger["email"], "seat_count": int(booking["seat_count"]),
+                "destination": trip["destination"], "boarded_at": boarded_at,
                 "boarded_count": updated["boarded_count"], "total_passengers": updated["demand_count"], "message": "Passenger boarded"}
 
 

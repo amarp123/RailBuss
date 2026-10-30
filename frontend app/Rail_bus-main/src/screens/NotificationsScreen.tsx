@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { ArrowLeft, Bell, CheckCircle, Bus, Clock, ShieldAlert } from 'lucide-react';
@@ -6,6 +6,14 @@ import { ArrowLeft, Bell, CheckCircle, Bus, Clock, ShieldAlert } from 'lucide-re
 export const NotificationsScreen: React.FC = () => {
   const navigate = useNavigate();
   const { language, notifications, markNotificationRead } = useApp();
+  const markedVisible = useRef(new Set<string>());
+
+  useEffect(() => {
+    notifications.filter((item) => !item.read && !markedVisible.current.has(item.id)).forEach((item) => {
+      markedVisible.current.add(item.id);
+      markNotificationRead(item.id);
+    });
+  }, [notifications, markNotificationRead]);
 
   const getIcon = (type: string) => {
     switch (type) {

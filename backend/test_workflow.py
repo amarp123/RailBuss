@@ -54,9 +54,41 @@ class DemandDispatchWorkflowTest(unittest.TestCase):
 
     def test_capacity_prevents_overselling(self):
         trip = self.resolve()
-        self.pay(trip["id"], 6); self.pay(trip["id"], 6); self.pay(trip["id"], 6); self.pay(trip["id"], 1); self.pay(trip["id"], 1)
+        self.pay(trip["id"], 6); self.pay(trip["id"], 6); self.pay(trip["id"], 6); self.pay(trip["id"], 2)
+        self.assertEqual(service.list_trips(user=self.admin)[0]["status"], "READY_TO_DISPATCH")
+        self.assertEqual(service.list_trips(user=self.admin)[0]["demand_count"], 20)
+        for _ in range(6): self.pay(trip["id"], 6)
+        self.assertEqual(service.list_trips(user=self.admin)[0]["demand_count"], 56)
         with self.assertRaises(HTTPException) as error: self.pay(trip["id"], 1)
         self.assertEqual(error.exception.status_code, 409)
+
+    def test_signed_qr_is_verified_and_one_scan_boards_passenger(self):
+        trip = self.resolve()
+        for _ in range(3): self.pay(trip["id"], 6)
+        self.pay(trip["id"], 2)
+        service.dispatch_service(trip["id"], None, self.admin)
+        service.create_conductor(service.ConductorCreateBody(full_name="Test Conductor", email="test-conductor@example.test", phone="9876543210", password="securepass123"), self.admin)
+        conductor_token = service.login(service.LoginBody(email="test-conductor@example.test", password="securepass123"))["access_token"]
+        conductor = self.user_from_token(conductor_token)
+        service.open_boarding(trip["id"], conductor)
+        booking = service.passenger_bookings(self.passenger)[0]
+        response = service.board_ticket(trip["id"], service.BoardBody(qr_code=booking["ticket"]["qr_content"]), conductor)
+        self.assertTrue(response["success"])
+        self.assertEqual(response["passenger_name"], "MVP Passenger")
+        self.assertEqual(response["seat_count"], booking["seat_count"])
+        self.assertEqual(response["destination"], booking["trip"]["destination"])
+        self.assertEqual(response["boarded_count"], booking["seat_count"])
+        with self.assertRaises(HTTPException) as error:
+            service.board_ticket(trip["id"], service.BoardBody(qr_code=booking["ticket"]["qr_content"]), conductor)
+        self.assertEqual(error.exception.status_code, 409)
+
+    def test_admin_can_create_conductor_and_non_admin_cannot(self):
+        created = service.create_conductor(service.ConductorCreateBody(full_name="New Conductor", email="crew@example.test", phone="9876543210", password="securepass123"), self.admin)
+        self.assertEqual(created["role"], "CONDUCTOR")
+        self.assertTrue(service.login(service.LoginBody(email="crew@example.test", password="securepass123"))["access_token"])
+        with self.assertRaises(HTTPException) as error:
+            service.create_conductor(service.ConductorCreateBody(full_name="Other Crew", email="other@example.test", phone="9876543211", password="securepass123"), self.passenger)
+        self.assertEqual(error.exception.status_code, 403)
 
     def test_expiry_cancels_direct_paid_reservation_without_gateway_refund(self):
         trip = self.resolve()

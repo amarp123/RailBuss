@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { WifiOff, CheckCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Booking } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { makeTicketQrDataUrl } from '../../services/api';
 
 interface TicketQRRendererProps {
   booking: Booking;
@@ -11,12 +12,20 @@ interface TicketQRRendererProps {
 export const TicketQRRenderer: React.FC<TicketQRRendererProps> = ({ booking, isUsed = false }) => {
   const { t, language } = useApp();
   const ticket = booking.ticket;
+  const [qrDataUrl, setQrDataUrl] = useState(ticket?.qrDataUrl || '');
   const isCancelled = booking.status === 'CANCELLED' || booking.status === 'REFUNDED';
   const refundPending = booking.paymentStatus === 'REFUND_PENDING';
   const isWaiting = booking.status === 'WAITING_DISPATCH';
 
   const destName = language === 'kn' ? booking.destinationStop.stopNameKn || booking.destinationStop.stopName : booking.destinationStop.stopName;
   const departureDate = new Date(booking.trip.scheduledDepartureTime);
+
+  useEffect(() => {
+    let active = true;
+    setQrDataUrl(ticket?.qrDataUrl || '');
+    if (ticket?.qrSignature) void makeTicketQrDataUrl(ticket.qrSignature).then((data) => { if (active) setQrDataUrl(data); }).catch(() => {});
+    return () => { active = false; };
+  }, [ticket?.qrDataUrl, ticket?.qrSignature]);
 
   return (
     <div className="relative w-full rounded-2xl bg-white border border-[#D9E1EA] shadow-[0_4px_20px_rgba(11,31,51,0.06)] overflow-hidden">
@@ -67,7 +76,7 @@ export const TicketQRRenderer: React.FC<TicketQRRendererProps> = ({ booking, isU
           Mysuru Junction to {destName}
         </p>
         <p className={`text-xs font-semibold mb-3 ${booking.trip.status === 'CANCELLED' ? 'text-[#D32F2F]' : isWaiting ? 'text-[#B76E00]' : 'text-[#0B7A55]'}`}>
-          {booking.trip.status === 'CANCELLED' ? 'Service unavailable · reservation cancelled' : isWaiting ? `${booking.trip.confirmedBookingsCount} of ${booking.trip.targetThreshold} paid seats · ticket after Admin dispatch` : 'Bus dispatch confirmed · ticket active'}
+          {booking.trip.status === 'CANCELLED' ? 'Service unavailable · reservation cancelled' : isWaiting ? `${booking.trip.confirmedBookingsCount} / ${booking.trip.capacity} seats reserved · Admin dispatch pending (minimum ${booking.trip.targetThreshold})` : 'Bus dispatch confirmed · ticket active'}
         </p>
 
         {/* Metadata Details Grid */}
@@ -100,8 +109,8 @@ export const TicketQRRenderer: React.FC<TicketQRRendererProps> = ({ booking, isU
       {/* BOTTOM HALF: QR Code & Verification */}
       <div className="px-5 pt-3 pb-6 flex flex-col items-center text-center bg-white">
         {/* QR Container Wrapper */}
-        {isWaiting ? <div className="w-full rounded-2xl bg-[#FFF4E5] border border-[#F5A524]/50 p-5 text-center space-y-2"><AlertTriangle className="w-7 h-7 mx-auto text-[#B76E00]"/><b className="block text-sm text-[#0B1F33]">Reservation paid · waiting for bus dispatch</b><p className="text-xs text-[#44474c]">We will issue your QR ticket and notify you after Admin dispatches the bus at 20 paid seats.</p></div> : <div className="relative p-3 rounded-2xl bg-white border border-[#D9E1EA] shadow-sm mb-3">
-          {ticket?.qrDataUrl ? <img src={ticket.qrDataUrl} alt={`Scannable ticket QR ${ticket.ticketCode}`} className={`w-[180px] h-[180px] object-contain ${isCancelled || isUsed ? 'opacity-25' : ''}`} /> : <div className="w-[180px] h-[180px] flex flex-col items-center justify-center gap-2 text-center text-xs text-[#74777d] px-4"><AlertTriangle className="w-6 h-6 text-[#B76E00]" /><span>Scannable QR unavailable. Show the ticket reference to the conductor.</span></div>}
+        {isWaiting ? <div className="w-full rounded-2xl bg-[#FFF4E5] border border-[#F5A524]/50 p-5 text-center space-y-2"><AlertTriangle className="w-7 h-7 mx-auto text-[#B76E00]"/><b className="block text-sm text-[#0B1F33]">Reservation paid · waiting for bus dispatch</b><p className="text-xs text-[#44474c]">The service becomes dispatch-ready at 20 seats and can accept up to 56. We will issue your QR ticket after Admin approves dispatch.</p></div> : <div className="relative p-3 rounded-2xl bg-white border border-[#D9E1EA] shadow-sm mb-3">
+          {qrDataUrl ? <img src={qrDataUrl} alt={`Scannable ticket QR ${ticket?.ticketCode}`} className={`w-[180px] h-[180px] object-contain ${isCancelled || isUsed ? 'opacity-25' : ''}`} /> : <div className="w-[180px] h-[180px] flex flex-col items-center justify-center gap-2 text-center text-xs text-[#74777d] px-4"><AlertTriangle className="w-6 h-6 text-[#B76E00]" /><span>{ticket ? 'Preparing your secure QR ticket…' : 'Your scannable QR ticket will appear after Admin dispatch.'}</span></div>}
           <svg 
             style={{ display: 'none' }}
             className={`w-[180px] h-[180px] text-[#0B1F33] transition-opacity duration-200 ${isCancelled || isUsed ? 'opacity-25' : ''}`}

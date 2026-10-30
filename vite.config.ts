@@ -12,6 +12,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:5174',
           changeOrigin: true,
         },
+        '/conductor-app': {
+          target: 'http://127.0.0.1:5175',
+          changeOrigin: true,
+        },
         '/railbus-api': {
           target: backend,
           changeOrigin: true,

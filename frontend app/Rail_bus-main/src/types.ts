@@ -59,6 +59,7 @@ export interface Trip {
   status: TripStatus;
   confirmedBookingsCount: number;
   targetThreshold: number; // 20
+  capacity: number; // 56 seats per bus
   busNumber?: string;
   conductorName?: string;
   boardingBay?: string;

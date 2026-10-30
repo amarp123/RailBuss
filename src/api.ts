@@ -1,4 +1,4 @@
-import type {ApiProblem,AuthUser,BoardRequest,BoardResponse,BusRoute,ConductorTrip,Manifest,OfflineSync,OfflineSyncResponse,OperationalEvent,OperatorBooking,OperatorNotification,Trip,TripStatus,UserProfile} from './types';
+import type { ApiProblem, AuthUser, BusRoute, ConductorAccount, OperationalEvent, OperatorBooking, OperatorNotification, Trip, TripStatus, UserProfile } from './types';
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||'/railbus-api').replace(/\/$/,'');
 
@@ -38,17 +38,12 @@ export const api={
   activity:()=>request<OperationalEvent[]>('/api/v1/operator/activity'),
   notifications:()=>request<OperatorNotification[]>('/api/v1/notifications'),
   bookings:()=>request<OperatorBooking[]>('/api/v1/operator/bookings?limit=1000'),
+  conductors:()=>request<ConductorAccount[]>('/api/v1/operator/conductors'),
+  createConductor:(data:{email:string;password:string;full_name:string;phone:string})=>request<ConductorAccount>('/api/v1/operator/conductors',{method:'POST',body:JSON.stringify(data)}),
   dispatch:(id:string)=>request<Trip>(`/api/v1/operator/trips/${encodeURIComponent(id)}/dispatch`,{method:'POST',body:JSON.stringify({})}),
   trip:(id:string)=>request<Trip>(`/api/v1/trips/${encodeURIComponent(id)}`),
   routes:async()=>{const all:BusRoute[]=[];for(let offset=0;;offset+=200){const page=await request<BusRoute[]>(`/api/v1/routes?limit=200&offset=${offset}`);all.push(...page);if(page.length<200)break}return all},
   route:(id:string)=>request<BusRoute>(`/api/v1/routes/${encodeURIComponent(id)}`),
-  conductorTrips:()=>request<ConductorTrip[]>('/api/v1/conductor/trips'),
-  manifest:(id:string)=>request<Manifest>(`/api/v1/conductor/trips/${encodeURIComponent(id)}/manifest`),
-  openBoarding:(id:string)=>request<unknown>(`/api/v1/conductor/trips/${encodeURIComponent(id)}/boarding/open`,{method:'POST'}),
-  board:(id:string,data:BoardRequest)=>request<BoardResponse>(`/api/v1/conductor/trips/${encodeURIComponent(id)}/board`,{method:'POST',body:JSON.stringify(data)}),
-  syncOffline:(id:string,data:OfflineSync)=>request<OfflineSyncResponse>(`/api/v1/conductor/trips/${encodeURIComponent(id)}/sync-offline`,{method:'POST',body:JSON.stringify(data)}),
-  depart:(id:string)=>request<unknown>(`/api/v1/conductor/trips/${encodeURIComponent(id)}/depart`,{method:'POST'}),
-  complete:(id:string)=>request<unknown>(`/api/v1/conductor/trips/${encodeURIComponent(id)}/complete`,{method:'POST'}),
 };
 
 export const apiBaseUrl=API_BASE;

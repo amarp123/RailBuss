@@ -5,15 +5,15 @@ FastAPI runs from `backend/main.py`; SQLite stores accounts, CSV routes, demand 
 ## Passenger and dispatch flow
 
 1. Register or login: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`.
-2. Search routes from Mysuru Junction: `POST /api/v1/services/search` with destination, train number, and travel date. It returns route, common fare, 20-seat capacity, live paid-seat count, and remaining capacity.
+2. Search routes from Mysuru Junction: `POST /api/v1/services/search` with destination, train number, and travel date. It returns route, common fare, 56-seat capacity, live paid-seat count, remaining capacity, and a departure note coordinated with train arrival and dispatch.
 3. Select a route: `POST /api/v1/trips/resolve` creates/returns the shared train-route-destination-date demand group.
 4. Tap **Pay**: `POST /api/v1/payments/pay` records an MVP paid reservation directly, checks capacity transactionally, and returns a `WAITING_DISPATCH` booking. This does not charge real money.
-5. At 20 paid seats, Admin receives an in-app dispatch notification. Admin reviews `GET /api/v1/operator/bookings` and dispatches using `POST /api/v1/operator/trips/{trip_id}/dispatch`. Dispatch issues signed tickets and notifies passengers.
+5. At 20 paid seats, Admin receives an in-app dispatch notification. The group can keep accepting reservations up to 56 seats. Admin reviews `GET /api/v1/operator/bookings` and dispatches using `POST /api/v1/operator/trips/{trip_id}/dispatch`. Dispatch issues signed QR tickets and notifies passengers.
 6. Conductor sees approved services at `GET /api/v1/conductor/trips`, claims boarding, views the manifest, and validates signed QR content or ticket reference before departing/completing.
 
 ## Expiry and notifications
 
-- Demand expires after `RAILBUS_DEMAND_WINDOW_HOURS` (12 hours by default). Groups below 20 seats are cancelled, and passengers receive in-app cancellation notifications. No real charge or automatic refund occurs in this MVP.
+- Demand expires after `RAILBUS_DEMAND_WINDOW_HOURS` (12 hours by default). Groups without Admin dispatch approval by the deadline are cancelled, and passengers receive in-app cancellation notifications. No real charge or automatic refund occurs in this MVP.
 - Passenger booking history and `GET /api/v1/notifications` show waiting, confirmed ticket, and cancellation states. The app polls for updates while open.
 
 ## Roles and data boundaries

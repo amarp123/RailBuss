@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { AlertCircle, ArrowRight, Bus, Info, Loader2, Search, Train } from 'lucide-react';
+import { AlertCircle, ArrowRight, Bus, Clock3, Info, Loader2, Search, Train } from 'lucide-react';
 import { api, ServiceOption } from '../services/api';
 
 const today = () => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; };
@@ -66,14 +66,15 @@ export const TripRegistrationScreen: React.FC = () => {
       {searched && <section className="space-y-3">
         <div className="flex items-center justify-between"><h2 className="font-bold text-lg text-[#0B1F33]">Available route services</h2><span className="text-[10px] text-[#74777d]">Live seats · updates every 5 sec</span></div>
         {!results.length ? <div className="bg-white rounded-2xl p-5 border border-[#D9E1EA] text-sm text-[#74777d]">No available route found for this destination and date.</div> : results.map(option=>{
-          const full=option.seatsRemaining===0 || !['AVAILABLE','AGGREGATING'].includes(option.status);
+          const full=option.seatsRemaining===0 || !['AVAILABLE','AGGREGATING','READY_TO_DISPATCH'].includes(option.status);
           return <article key={option.route.id} className="bg-white rounded-2xl p-4 border border-[#D9E1EA] shadow-sm space-y-3">
             <div className="flex items-start justify-between gap-3"><div><span className="font-mono text-xs font-bold text-[#F5A524] bg-[#0B1F33] px-2 py-0.5 rounded">{option.route.routeCode}</span><h3 className="font-bold text-base text-[#0B1F33] mt-1.5">{option.destinationStop.stopName}</h3><p className="text-xs text-[#74777d]">Train {option.trainNumber} · {option.travelDate}</p></div><div className="text-right"><span className="font-mono text-lg font-bold text-[#0B1F33]">₹{option.farePerSeat}</span><span className="block text-[10px] text-[#74777d]">per seat</span></div></div>
+            <p className="flex items-start gap-1 text-[11px] text-[#0B7A55]"><Clock3 className="w-3.5 h-3.5 shrink-0"/>Bus departs {option.departureNote.toLowerCase()}.</p>
             <div className="rounded-xl bg-[#F3F6FA] p-3"><div className="flex justify-between text-xs"><b className="flex items-center gap-1"><Bus className="w-3.5 h-3.5"/> {option.confirmedSeats} paid{option.checkoutHolds ? ` · ${option.checkoutHolds} held` : ''} / {option.capacity}</b><span>{option.seatsRemaining} left</span></div><div className="h-1.5 bg-white rounded-full mt-2 overflow-hidden"><div className="h-full bg-[#0B7A55] rounded-full" style={{width:`${Math.min(100,(option.confirmedSeats+option.checkoutHolds)/option.capacity*100)}%`}}/></div></div>
-            <button type="button" disabled={busy||Boolean(selecting)||full} onClick={()=>void selectService(option)} className="w-full h-10 rounded-xl bg-[#0B1F33] text-[#F5A524] font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-40">{selecting===option.route.id?<><Loader2 className="w-4 h-4 animate-spin"/>Opening service…</>:full?'No seats available':'Select bus & seats'}<ArrowRight className="w-3.5 h-3.5"/></button>
+            <button type="button" disabled={busy||Boolean(selecting)||full} onClick={()=>void selectService(option)} className="w-full h-10 rounded-xl bg-[#0B1F33] text-[#F5A524] font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-40">{selecting===option.route.id?<><Loader2 className="w-4 h-4 animate-spin"/>Opening service…</>:full?'No seats available':option.status==='READY_TO_DISPATCH'?'Join waiting list · dispatch ready':'Select bus & seats'}<ArrowRight className="w-3.5 h-3.5"/></button>
           </article>
         })}
-        <div className="bg-[#ecf4fe] rounded-xl p-3.5 flex items-start gap-2.5 border border-[#c4c6cd]/40"><Info className="w-4 h-4 shrink-0 mt-0.5"/><p className="text-xs leading-relaxed">Payment places your seats in a paid waiting list. The bus is dispatched only after 20 seats are sold and Admin confirms dispatch; your ticket is generated at that point.</p></div>
+        <div className="bg-[#ecf4fe] rounded-xl p-3.5 flex items-start gap-2.5 border border-[#c4c6cd]/40"><Info className="w-4 h-4 shrink-0 mt-0.5"/><p className="text-xs leading-relaxed">The bus holds up to 56 passengers. At 20 paid seats, Admin can approve dispatch; seats remain available until the bus is full. Your QR ticket is generated after dispatch approval. Departure is coordinated with your train arrival.</p></div>
       </section>}
       <div className="text-center pt-1"><button type="button" onClick={()=>navigate('/tickets')} className="text-xs font-semibold text-[#0B1F33] hover:underline">{t.registration.alreadyBooked}</button></div>
     </div>
